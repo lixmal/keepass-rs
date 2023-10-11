@@ -25,7 +25,7 @@ pub const KDBX4_CURRENT_MINOR_VERSION: u16 = 0;
 /// Supported KDB database versions, with the associated
 /// minor version.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum DatabaseVersion {
     KDB(u16),
     KDB2(u16),

@@ -1,5 +1,30 @@
 //! Types for representing data contained in a KeePass database
 
+use std::{collections::HashMap, str::FromStr};
+
+use chrono::NaiveDateTime;
+use uuid::Uuid;
+
+use crate::{
+    config::DatabaseConfig,
+    error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
+    format::{
+        DatabaseVersion,
+        kdb::parse_kdb,
+        kdbx3::{decrypt_kdbx3, parse_kdbx3},
+        kdbx4::{decrypt_kdbx4, parse_kdbx4},
+    },
+    key::DatabaseKey,
+};
+pub use crate::db::{
+    entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
+    group::Group,
+    meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
+    node::{Node, NodeIter, NodeRef, NodeRefMut},
+};
+#[cfg(feature = "totp")]
+pub use crate::db::otp::{TOTP, TOTPAlgorithm};
+
 pub(crate) mod entry;
 pub(crate) mod group;
 pub(crate) mod meta;
@@ -8,36 +33,9 @@ pub(crate) mod node;
 #[cfg(feature = "totp")]
 pub(crate) mod otp;
 
-use std::{collections::HashMap, str::FromStr};
-
-use chrono::NaiveDateTime;
-use uuid::Uuid;
-
-pub use crate::db::{
-    entry::{AutoType, AutoTypeAssociation, Entry, History, Value},
-    group::Group,
-    meta::{BinaryAttachment, BinaryAttachments, CustomIcons, Icon, MemoryProtection, Meta},
-    node::{Node, NodeIter, NodeRef, NodeRefMut},
-};
-
-#[cfg(feature = "totp")]
-pub use crate::db::otp::{TOTPAlgorithm, TOTP};
-
-use crate::{
-    config::DatabaseConfig,
-    error::{DatabaseIntegrityError, DatabaseOpenError, ParseColorError},
-    format::{
-        kdb::parse_kdb,
-        kdbx3::{decrypt_kdbx3, parse_kdbx3},
-        kdbx4::{decrypt_kdbx4, parse_kdbx4},
-        DatabaseVersion,
-    },
-    key::DatabaseKey,
-};
-
 /// A decrypted KeePass database
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct Database {
     /// Configuration settings of the database such as encryption and compression algorithms
     pub config: DatabaseConfig,
@@ -142,7 +140,7 @@ impl Database {
 
 /// Timestamps for a Group or Entry
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct Times {
     /// Does this node expire
     pub expires: bool,
@@ -233,14 +231,14 @@ impl Times {
 
 /// Collection of custom data fields for an entry or metadata
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct CustomData {
     pub items: HashMap<String, CustomDataItem>,
 }
 
 /// Custom data field for an entry or metadata for internal use
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct CustomDataItem {
     pub value: Option<Value>,
     pub last_modification_time: Option<NaiveDateTime>,
@@ -248,7 +246,7 @@ pub struct CustomDataItem {
 
 /// Custom data field for an entry or metadata from XML data
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct CustomDataItemDenormalized {
     pub key: String,
     pub custom_data_item: CustomDataItem,
@@ -256,7 +254,7 @@ pub struct CustomDataItemDenormalized {
 
 /// Binary attachments stored in a database inner header
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct HeaderAttachment {
     pub flags: u8,
     pub content: Vec<u8>,
@@ -264,14 +262,14 @@ pub struct HeaderAttachment {
 
 /// Elements that have been previously deleted
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeletedObjects {
     pub objects: Vec<DeletedObject>,
 }
 
 /// A reference to a deleted element
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct DeletedObject {
     pub uuid: Uuid,
     pub deletion_time: NaiveDateTime,
@@ -279,6 +277,7 @@ pub struct DeletedObject {
 
 /// A color value for the Database, or Entry
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Deserialize))]
 pub struct Color {
     pub r: u8,
     pub g: u8,
@@ -288,8 +287,8 @@ pub struct Color {
 #[cfg(feature = "serialization")]
 impl serde::Serialize for Color {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
+        where
+            S: serde::Serializer,
     {
         serializer.serialize_str(&self.to_string())
     }
@@ -324,7 +323,7 @@ impl Color {
 mod database_tests {
     use std::fs::File;
 
-    use crate::{error::DatabaseOpenError, Database, DatabaseKey};
+    use crate::{Database, DatabaseKey, error::DatabaseOpenError};
 
     #[test]
     fn test_xml() -> Result<(), DatabaseOpenError> {
@@ -357,8 +356,28 @@ mod database_tests {
             &mut buffer.as_slice(),
             DatabaseKey::new().with_password("testing"),
         )
-        .unwrap();
+            .unwrap();
 
         assert_eq!(db, db_loaded);
+    }
+
+    #[cfg(feature = "serialization")]
+    #[test]
+    fn test_serialization_roundtrip() {
+        let db = Database::open(
+            &mut File::open("tests/resources/test_db_with_password.kdbx").unwrap(),
+            DatabaseKey::new().with_password("demopass"),
+        )
+            .unwrap();
+
+        let json_db = serde_json::to_string(&db).unwrap();
+        let db_from_json = serde_json::from_str(&json_db).unwrap();
+
+        assert_eq!(db, db_from_json);
+
+        let binary_db = postcard::to_stdvec(&db).unwrap();
+        let db_from_binary = postcard::from_bytes(&binary_db).unwrap();
+
+        assert_eq!(db, db_from_binary);
     }
 }

@@ -5,7 +5,7 @@ use crate::db::{Color, CustomData};
 
 /// Database metadata
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct Meta {
     /// the program that generated the database file.
     pub generator: Option<String>,
@@ -86,7 +86,7 @@ pub struct Meta {
 
 /// Database memory protection settings
 #[derive(Debug, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct MemoryProtection {
     /// Whether titles should be protected
     pub protect_title: bool,
@@ -118,14 +118,14 @@ impl Default for MemoryProtection {
 
 /// Collection of custom icons
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct CustomIcons {
     pub icons: Vec<Icon>,
 }
 
 /// A custom icon
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct Icon {
     /// UUID, to reference the icon
     pub uuid: Uuid,
@@ -136,14 +136,14 @@ pub struct Icon {
 
 /// Collection of binary attachments in the metadata of an XML database
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct BinaryAttachments {
     pub binaries: Vec<BinaryAttachment>,
 }
 
 /// Binary attachment in the metadata of a XML database
 #[derive(Debug, Default, PartialEq, Eq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct BinaryAttachment {
     pub identifier: Option<String>,
     pub compressed: bool,

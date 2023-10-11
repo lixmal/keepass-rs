@@ -4,7 +4,7 @@ use crate::db::{entry::Entry, group::Group};
 
 /// An owned node in the database tree structure which can either be an Entry or Group
 #[derive(Debug, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum Node {
     Group(Group),
     Entry(Entry),

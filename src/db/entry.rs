@@ -2,16 +2,17 @@ use std::collections::HashMap;
 
 use chrono::NaiveDateTime;
 use secstr::SecStr;
+#[cfg(feature = "serialization")]
+use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::db::{Color, CustomData, Times};
-
 #[cfg(feature = "totp")]
-use crate::db::otp::{TOTPError, TOTP};
+use crate::db::otp::{TOTP, TOTPError};
 
 /// A database entry containing several key-value fields.
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct Entry {
     pub uuid: Uuid,
     pub fields: HashMap<String, Value>,
@@ -33,6 +34,7 @@ pub struct Entry {
 
     pub history: Option<History>,
 }
+
 impl Entry {
     pub fn new() -> Entry {
         Entry {
@@ -170,10 +172,34 @@ impl<'a> Entry {
 
 /// A value that can be a raw string, byte array, or protected memory region
 #[derive(Debug, Eq, PartialEq, Clone)]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum Value {
     Bytes(Vec<u8>),
     Unprotected(String),
+    #[cfg_attr(
+    feature = "serialization",
+    serde(
+    serialize_with = "serialize_protected",
+    deserialize_with = "deserialize_protected",
+    )
+    )]
     Protected(SecStr),
+}
+
+#[cfg(feature = "serialization")]
+fn serialize_protected<S>(v: &SecStr, serializer: S) -> Result<S::Ok, S::Error>
+    where S: serde::Serializer,
+{
+    serializer.serialize_str(String::from_utf8_lossy(v.unsecure()).as_ref())
+}
+
+#[cfg(feature = "serialization")]
+fn deserialize_protected<'de, D>(deserializer: D) -> Result<SecStr, D::Error>
+    where D: serde::Deserializer<'de>,
+{
+    Ok(
+        SecStr::from(String::deserialize(deserializer)?)
+    )
 }
 
 impl Value {
@@ -186,25 +212,9 @@ impl Value {
     }
 }
 
-#[cfg(feature = "serialization")]
-impl serde::Serialize for Value {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: serde::Serializer,
-    {
-        match self {
-            Value::Bytes(b) => serializer.serialize_bytes(b),
-            Value::Unprotected(u) => serializer.serialize_str(u),
-            Value::Protected(p) => {
-                serializer.serialize_str(String::from_utf8_lossy(p.unsecure()).as_ref())
-            }
-        }
-    }
-}
-
 /// An AutoType setting associated with an Entry
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct AutoType {
     pub enabled: bool,
     pub sequence: Option<String>,
@@ -213,7 +223,7 @@ pub struct AutoType {
 
 /// A window association associated with an AutoType setting
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct AutoTypeAssociation {
     pub window: Option<String>,
     pub sequence: Option<String>,
@@ -221,10 +231,11 @@ pub struct AutoTypeAssociation {
 
 /// An entry's history
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct History {
     pub(crate) entries: Vec<Entry>,
 }
+
 impl History {
     pub fn add_entry(&mut self, mut entry: Entry) {
         if entry.history.is_some() {
@@ -375,18 +386,18 @@ mod entry_tests {
     fn serialization() {
         assert_eq!(
             serde_json::to_string(&Value::Bytes(vec![65, 66, 67])).unwrap(),
-            "[65,66,67]".to_string()
+            r#"{"Bytes":[65,66,67]}"#.to_string()
         );
 
         assert_eq!(
             serde_json::to_string(&Value::Unprotected("ABC".to_string())).unwrap(),
-            "\"ABC\"".to_string()
+            r#"{"Unprotected":"ABC"}"#.to_string()
         );
 
         assert_eq!(
             serde_json::to_string(&Value::Protected(SecStr::new("ABC".as_bytes().to_vec())))
                 .unwrap(),
-            "\"ABC\"".to_string()
+            r#"{"Protected":"ABC"}"#.to_string()
         );
     }
 }

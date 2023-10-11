@@ -1,9 +1,9 @@
 //! Configuration options for how to compress and encrypt databases
-use hex_literal::hex;
-
 use std::convert::TryFrom;
 
-pub use crate::format::DatabaseVersion;
+use hex_literal::hex;
+#[cfg(feature = "serialization")]
+use serde::Deserialize;
 
 use crate::{
     compression,
@@ -18,6 +18,7 @@ use crate::{
     format::KDBX4_CURRENT_MINOR_VERSION,
     variant_dictionary::VariantDictionary,
 };
+pub use crate::format::DatabaseVersion;
 
 const _CIPHERSUITE_AES128: [u8; 16] = hex!("61ab05a1946441c38d743a563df8dd35");
 const CIPHERSUITE_AES256: [u8; 16] = hex!("31c1f2e6bf714350be5805216afc5aff");
@@ -31,7 +32,7 @@ const CHA_CHA_20: u32 = 3;
 
 /// Configuration of how a database should be stored
 #[derive(Debug, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct DatabaseConfig {
     /// Version of the outer database file
     pub version: DatabaseVersion,
@@ -69,7 +70,7 @@ impl Default for DatabaseConfig {
 
 /// Choices for outer encryption
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum OuterCipherConfig {
     AES256,
     Twofish,
@@ -125,7 +126,7 @@ impl TryFrom<&[u8]> for OuterCipherConfig {
 
 /// Choices for encrypting protected values inside of databases
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum InnerCipherConfig {
     Plain,
     Salsa20,
@@ -188,7 +189,7 @@ const KDF_ROUNDS: &str = "R";
 
 /// Choices for Key Derivation Functions (KDFs)
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum KdfConfig {
     /// Derive keys with repeated AES encryption
     Aes { rounds: u64 },
@@ -199,8 +200,11 @@ pub enum KdfConfig {
         parallelism: u32,
 
         #[cfg_attr(
-            feature = "serialization",
-            serde(serialize_with = "serialize_argon2_version")
+        feature = "serialization",
+        serde(
+        serialize_with = "serialize_argon2_version",
+        deserialize_with = "deserialize_argon2_version",
+        )
         )]
         version: argon2::Version,
     },
@@ -211,8 +215,11 @@ pub enum KdfConfig {
         parallelism: u32,
 
         #[cfg_attr(
-            feature = "serialization",
-            serde(serialize_with = "serialize_argon2_version")
+        feature = "serialization",
+        serde(
+        serialize_with = "serialize_argon2_version",
+        deserialize_with = "deserialize_argon2_version",
+        )
         )]
         version: argon2::Version,
     },
@@ -224,6 +231,17 @@ fn serialize_argon2_version<S: serde::Serializer>(
     serializer: S,
 ) -> Result<<S as serde::Serializer>::Ok, <S as serde::Serializer>::Error> {
     serializer.serialize_u32(version.as_u32())
+}
+
+#[cfg(feature = "serialization")]
+fn deserialize_argon2_version<'de, D>(deserializer: D) -> Result<argon2::Version, D::Error>
+    where D: serde::Deserializer<'de>,
+{
+    Ok(
+        argon2::Version::from_u32(
+            u32::deserialize(deserializer)?
+        ).map_err(serde::de::Error::custom)?,
+    )
 }
 
 impl KdfConfig {
@@ -393,7 +411,7 @@ impl TryFrom<VariantDictionary> for (KdfConfig, Vec<u8>) {
 
 /// Choices of compression algorithm
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub enum CompressionConfig {
     None,
     GZip,

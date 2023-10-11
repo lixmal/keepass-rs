@@ -9,7 +9,7 @@ use crate::db::{
 
 /// A database group with child groups and entries
 #[derive(Debug, Default, Eq, PartialEq, Clone)]
-#[cfg_attr(feature = "serialization", derive(serde::Serialize))]
+#[cfg_attr(feature = "serialization", derive(serde::Serialize, serde::Deserialize))]
 pub struct Group {
     /// The unique identifier of the group
     pub uuid: Uuid,
